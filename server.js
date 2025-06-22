@@ -39,7 +39,7 @@ let firstByte = true;
 let speaking = false;
 let send_first_sentence_input_time = null;
 const chars_to_check = [".", ",", "!", "?", ";", ":"]
-let userConversations = '';
+let userConversations = [];
 
 // Function to handle HTTP requests
 function handleRequest(request, response) {
@@ -89,14 +89,19 @@ mediaws.on("connect", function (connection) {
 class MediaStream {
   constructor(connection) {
     this.connection = connection;
-    this.deepgram = setupDeepgram(this);
-    this.deepgramTTSWebsocket = setupDeepgramWebsocket(this);
+    this.init(); // all async logic inside
     connection.on("message", this.processMessage.bind(this));
     connection.on("close", this.close.bind(this));
-    this.hasSeenMedia = false;
+  }
 
+  async init() {
+    this.hasSeenMedia = false;
     this.messages = [];
     this.repeatCount = 0;
+
+    this.deepgram = setupDeepgram(this); // STT connects async internally
+    this.deepgramTTSWebsocket = await setupDeepgramWebsocket(this); //waits until open
+
     promptLLM(this, "");
   }
 
@@ -150,66 +155,17 @@ async function promptLLM(mediaStream, prompt) {
   const stream = openai.beta.chat.completions.stream({
     model: 'gpt-4o-mini',
     stream: true,
+    max_tokens: 60,
+    temperature: 0.7,
+    top_p: 0.8,
+    presence_penalty: 0,
+    frequency_penalty: 0,
     messages: [
       {
         role: 'assistant',
-        content: `You are an Australian AI CSR named Botie. Be friendly and casual like a local Aussie — use a natural Australian tone (but don't overdo it).
-
-Your job is to help the caller book a job.
-
-You must collect the following 4 things, but only ask for what hasn't already been mentioned by the user:
-1. Full name
-2. Phone number  
-3. Address
-4. The issue or job they need done
-
-Below is the real-time conversation so far:
-===
-${userConversations}
-===
-
-CRITICAL ANALYSIS: Before replying, carefully scan the ENTIRE conversation history and identify what information has been provided:
-
-1. FULL NAME: Look for ANY name mentioned anywhere in the conversation:
-   - "My name is [NAME]"
-   - "My full name is [NAME]" 
-   - "I'm [NAME]"
-   - "It's [NAME]"
-   - Any standalone names like "Michael", "John", "Franklin", etc.
-
-2. PHONE NUMBER: Look for ANY numbers or phone mentions:
-   - "My phone number is [NUMBERS]"
-   - "It's [NUMBERS]"
-   - Any sequence of numbers like "one two four three", "1438", "124398", etc.
-   - Phone number formats like "+1 243980"
-
-3. ADDRESS: Look for ANY location or address mentions:
-   - "My address is [LOCATION]"
-   - "I live at [LOCATION]"
-   - "I'm located at [LOCATION]"
-   - Any place names like "New York", "Times Square", "Miami", "Florida", etc.
-   - Street names, cities, states mentioned anywhere
-
-4. ISSUE/JOB: Look for ANY problem description:
-   - "My [THING] is not working"
-   - "I'm having issues with [THING]"
-   - "[THING] got busted"
-   - "[THING] won't start"
-   - "[THING] got cut off"
-   - Any mention of problems, repairs, issues, etc.
-
-IMPORTANT RULES:
-- If ANY of these 4 items appear ANYWHERE in the conversation, consider them PROVIDED
-- Do NOT ask for information that has already been mentioned, even if it was mentioned earlier
-- If ALL 4 items are provided, immediately say: "Thanks, we've got your job request. Someone will be in touch shortly. Goodbye!"
-- Only ask for ONE missing item at a time
-- Never repeat questions for information already provided
-- If the user seems frustrated or says "I already told you", immediately end the conversation
-
-Your responses must be short, casual, and natural. If this is the first message with no user speech in conversation yet, start with:
-**"Hi, how can I help you today?"** 
-But if you can see user conversation then continue`
+        content: `You are Botie, a helpful Aussie CSR. Don't forget to greet and ask How can I help you. Be friendly, but always keep replies short — **one sentence max**. Do not explain or repeat. Be quick and casual. gather name, address and issue. When you have got this say **Thanks, we’ve got your job request. Someone will be in touch shortly.**`
       },
+      ...userConversations,
       {
         role: 'user',
         content: prompt
@@ -219,6 +175,7 @@ But if you can see user conversation then continue`
 
   speaking = true;
   let firstToken = true;
+  let assistantReply = '';
   for await (const chunk of stream) {
     if (speaking) {
       if (firstToken) {
@@ -231,15 +188,16 @@ But if you can see user conversation then continue`
       }
       chunk_message = chunk.choices[0].delta.content;
       if (chunk_message) {
-        userConversations+= " Agent: " + chunk_message;
+        assistantReply += chunk_message;
         process.stdout.write(chunk_message)
-        if (!send_first_sentence_input_time && containsAnyChars(chunk_message)){
+        if (!send_first_sentence_input_time && containsAnyChars(chunk_message)) {
           send_first_sentence_input_time = Date.now();
         }
         mediaStream.deepgramTTSWebsocket.send(JSON.stringify({ 'type': 'Speak', 'text': chunk_message }));
       }
     }
   }
+  userConversations.push({ role: "assistant", content: assistantReply });
   // Tell TTS Websocket were finished generation of tokens
   mediaStream.deepgramTTSWebsocket.send(JSON.stringify({ 'type': 'Flush' }));
 }
@@ -247,7 +205,6 @@ But if you can see user conversation then continue`
 function containsAnyChars(str) {
   // Convert the string to an array of characters
   let strArray = Array.from(str);
-  
   // Check if any character in strArray exists in chars_to_check
   return strArray.some(char => chars_to_check.includes(char));
 }
@@ -256,60 +213,66 @@ function containsAnyChars(str) {
   Deepgram Streaming Text to Speech
 */
 const setupDeepgramWebsocket = (mediaStream) => {
-  const options = {
-    headers: {
-      Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`
-    }
-  };
-  const ws = new WebSocket(deepgramTTSWebsocketURL, options);
+  return new Promise((resolve, reject) => {
 
-  ws.on('open', function open() {
-    console.log('deepgram TTS: Connected');
-  });
 
-  ws.on('message', function incoming(data) {
-    // Handles barge in
-    if (speaking) {
-      try {
-        let json = JSON.parse(data.toString());
-        console.log('deepgram TTS: ', data.toString());
-        return;
-      } catch (e) {
-        // Ignore
+    const options = {
+      headers: {
+        Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`
       }
-      if (firstByte) {
-        const end = Date.now();
-        const duration = end - ttsStart;
-        console.warn('\n\n>>> deepgram TTS: Time to First Byte = ', duration, '\n');
-        firstByte = false;
-        if (send_first_sentence_input_time){
-          console.log(`>>> deepgram TTS: Time to First Byte from end of sentence token = `, (end - send_first_sentence_input_time));
+    };
+    const ws = new WebSocket(deepgramTTSWebsocketURL, options);
+
+    ws.on('open', function open() {
+      resolve(ws);
+      console.log('deepgram TTS: Connected');
+    });
+
+    ws.on('message', function incoming(data) {
+      // Handles barge in
+      if (speaking) {
+        try {
+          let json = JSON.parse(data.toString());
+          console.log('deepgram TTS: ', data.toString());
+          return;
+        } catch (e) {
+          // Ignore
         }
+        if (firstByte) {
+          const end = Date.now();
+          const duration = end - ttsStart;
+          console.warn('\n\n>>> deepgram TTS: Time to First Byte = ', duration, '\n');
+          firstByte = false;
+          if (send_first_sentence_input_time) {
+            console.log(`>>> deepgram TTS: Time to First Byte from end of sentence token = `, (end - send_first_sentence_input_time));
+          }
+        }
+        const payload = data.toString('base64');
+        const message = {
+          event: 'media',
+          streamSid: streamSid,
+          media: {
+            payload,
+          },
+        };
+        const messageJSON = JSON.stringify(message);
+
+        // console.log('\ndeepgram TTS: Sending data.length:', data.length);
+        mediaStream.connection.sendUTF(messageJSON);
       }
-      const payload = data.toString('base64');
-      const message = {
-        event: 'media',
-        streamSid: streamSid,
-        media: {
-          payload,
-        },
-      };
-      const messageJSON = JSON.stringify(message);
+    });
 
-      // console.log('\ndeepgram TTS: Sending data.length:', data.length);
-      mediaStream.connection.sendUTF(messageJSON);
-    }
-  });
+    ws.on('close', function close() {
+      console.log('deepgram TTS: Disconnected from the WebSocket server');
+    });
 
-  ws.on('close', function close() {
-    console.log('deepgram TTS: Disconnected from the WebSocket server');
+    ws.on('error', function error(error) {
+      console.log("deepgram TTS: error received");
+      console.error(error);
+      reject(err);
+    });
+    return ws;
   });
-
-  ws.on('error', function error(error) {
-    console.log("deepgram TTS: error received");
-    console.error(error);
-  });
-  return ws;
 }
 
 /*
@@ -329,10 +292,9 @@ const setupDeepgram = (mediaStream) => {
     channels: 1,
     multichannel: false,
     // End of Speech
-    no_delay: true,
     interim_results: true,
-    endpointing: 300,
-    utterance_end_ms: 1000
+    no_delay: true,
+    endpointing: 200,
   });
 
   if (keepAlive) clearInterval(keepAlive);
@@ -347,13 +309,13 @@ const setupDeepgram = (mediaStream) => {
       const transcript = data.channel.alternatives[0].transcript;
       if (transcript !== "") {
         if (data.is_final) {
-          userConversations += (" User: " + transcript);
           is_finals.push(transcript);
           if (data.speech_final) {
             const utterance = is_finals.join(" ");
             is_finals = [];
             console.log(`deepgram STT: [Speech Final] ${utterance}`);
             llmStart = Date.now();
+            userConversations.push({ role: "user", content: utterance });
             promptLLM(mediaStream, utterance); // Send the final transcript to OpenAI for response
           } else {
             console.log(`deepgram STT:  [Is Final] ${transcript}`);
