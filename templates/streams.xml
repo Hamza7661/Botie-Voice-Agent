@@ -2,7 +2,7 @@
 <Response>
   <Say language="en-AU">You have reached Botie. I can take a quick job request. A CSR will be with you shortly, Please Wait.</Say>
   <Connect>
-    <Stream url="wss://actual-turkey-neutral.ngrok-free.app/streams">
+    <Stream url="wss://deepgram-twilio-streaming-voice-agent-lively-forest-705.fly.dev">
       <Parameter name="aCustomParameter" value="aCustomValue that was set in TwiML" />
     </Stream>
   </Connect>
