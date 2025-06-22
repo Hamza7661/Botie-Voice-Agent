@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "Streaming Voice Agent Sample",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
@@ -13,11 +14,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@deepgram/sdk": "^3.4.4",
-    "dotenv": "^16.4.5",
+    "@deepgram/sdk": "^3.13.0",
+    "body-parser": "^2.2.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
     "httpdispatcher": "^2.1.2",
     "node-fetch": "^2.7.0",
     "openai": "^4.52.7",
-    "websocket": "^1.0.28"
+    "websocket": "^1.0.28",
+    "ws": "^8.18.2"
   }
 }
