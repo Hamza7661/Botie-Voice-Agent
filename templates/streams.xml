@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Response>
+  <Say language="en-AU">You have reached Botie. I can take a quick job request. A CSR will be with you shortly, Please Wait.</Say>
+  <Connect>
+    <Stream url="wss://actual-turkey-neutral.ngrok-free.app/streams">
+      <Parameter name="aCustomParameter" value="aCustomValue that was set in TwiML" />
+    </Stream>
+  </Connect>
+  <Say language="en-AU">Call ended. Goodbye!</Say>
+</Response>
