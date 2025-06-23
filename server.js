@@ -87,11 +87,6 @@ wss.on('connection', async (wsTwilio, req) => {
       clearInterval(keepAliveInterval);
       keepAliveInterval = null;
     }
-
-    if (connection && connection.isConnected()) {
-      console.log("Closing Deepgram")
-      connection = null;
-    }
   });
 });
 
