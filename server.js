@@ -17,7 +17,7 @@ wss.on('connection', async (wsTwilio, req) => {
   let keepAliveInterval;
   let streamSid = null;
 
-  const connection = dg.agent();
+  let connection = dg.agent();
 
   connection.on(AgentEvents.Welcome, () => {
     console.log('✅ Deepgram Agent Connected');
@@ -83,10 +83,14 @@ wss.on('connection', async (wsTwilio, req) => {
   wsTwilio.on('close', () => {
     console.log('[🔌 Twilio WS Disconnected]');
 
-    clearInterval(keepAliveInterval);
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
 
-    if (connection) {
-      connection.disconnect();
+    if (connection && connection.isConnected()) {
+      console.log("Closing Deepgram")
+      connection = null;
     }
   });
 });
