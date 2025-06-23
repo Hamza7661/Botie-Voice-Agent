@@ -32,7 +32,7 @@ wss.on('connection', async (wsTwilio, req) => {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are Botie, a friendly Australian CSR. Have conversation and collect name, address, and issue. Dont ask everything at once. Say "Thanks, we've got your job request. Someone will be in touch shortly. Goodbye! TATA" when done.`
+          prompt: `You are Botie, a friendly Australian CSR. Have conversation and collect name, address, and issue. Dont ask everything at once. Say "Thanks, we've got your job request. Someone will be in touch shortly. Goodbye! BYE" when done.`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
@@ -56,14 +56,13 @@ wss.on('connection', async (wsTwilio, req) => {
 
   connection.on(AgentEvents.ConversationText, (data) => {
     console.log('[🗣️ Transcription]', JSON.stringify(data, null, 2));
-    if (data.role == "assistant" && data.content == "TATA") {
-      //close the connection
+    if (data.role == "assistant" && data.content == "BYE") {
+
       console.log('[👋 Closing connection after goodbye]');
-      if (connection && typeof connection.finish === 'function') {
-        connection.finish();
+
+      if (wsTwilio && wsTwilio.readyState === wsTwilio.OPEN) {
+        wsTwilio.close();
       }
-      clearInterval(keepAliveInterval);
-      wsTwilio.close();
     }
   });
 
@@ -83,10 +82,12 @@ wss.on('connection', async (wsTwilio, req) => {
 
   wsTwilio.on('close', () => {
     console.log('[🔌 Twilio WS Disconnected]');
-    if (connection && typeof connection.finish === 'function') {
-      connection.finish();
-    }
+
     clearInterval(keepAliveInterval);
+
+    if (connection) {
+      connection.disconnect();
+    }
   });
 });
 
