@@ -1,111 +1,66 @@
-# Callable Deepgram <> Twilio Streaming Voice Agent
+# Deepgram Twilio Streaming Voice Agent
 
-This is a basic server application that show cases end to end streaming voice agent
+A real-time voice agent that connects Twilio phone calls to Deepgram's Agent API for natural conversations.
 
-* Callable Phone Number
-* Streaming Twilio - Inbound Audio
-* Streaming Deepgram - Speech to Text
-* Streaming OpenAI - LLM
-* Streaming Deepgram - Text to Speech
-* Streaming Twilio - Outbound Audio
+## Features
 
-It's a good starting point to develop your own application logic.
+- Real-time voice streaming between Twilio and Deepgram
+- Natural conversation with AI agent
+- Automatic speech recognition and text-to-speech
+- Australian CSR personality for job request collection
 
-## App sever setup
+## Environment Variables
 
+Create a `.env` file with:
 
-### Set environment variables
-
- You will need to set environment variables for your shell session. These environment variables are used to store the API keys required for authentication when accessing the OpenAI and Deepgram APIs.
-
- Open a Terminal and run:
-
-```sh
-export OPENAI_API_KEY=xxx
-export DEEPGRAM_API_KEY=xxx
+```env
+DEEPGRAM_API_KEY=your_deepgram_api_key_here
+PORT=8080
 ```
 
-To verify the environment variables are set, run the following commands in your Terminal:
+## Local Development
 
-```sh
-echo $OPENAI_API_KEY
-echo $DEEPGRAM_API_KEY
+1. Install dependencies:
+```bash
+npm install
 ```
 
-### Installation
-
-**Requires Node >= v12.1.0**
-
-Run `npm install`
-
-npm dependencies (contained in the `package.json`):
-* httpdispatcher
-* websocket
-
-#### Running the server
-
-Start with `npm run start`
-
-## Demo Setup
-
-### Configure the environment using the Ngrok UI & CLI
-
-1. Install ngrok:
-- If on MacOS: `brew install ngrok/ngrok/ngrok`
-- If on Windows/Linux: Follow the [instructions on ngrok's site](https://ngrok.com/docs/getting-started/)
-
-2. Sign up for a ngrok account:
-- If you haven't already, sign up for an [ngrok account](https://dashboard.ngrok.com/get-started/setup/macos)
-- Copy your ngrok authtoken from your [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken)
-- Run the following command in your terminal to install the auth token and connect the ngrok agent to your account.
-
-```sh
-ngrok config add-authtoken <TOKEN>
+2. Start the server:
+```bash
+npm start
 ```
 
-### Twilio Phone Number Setup
+3. The server will run on `http://localhost:8080`
 
-- You will need to provide a valid phone number from Twilio. Please see these [instructions](https://help.twilio.com/articles/223135247-How-to-Search-for-and-Buy-a-Twilio-Phone-Number-from-Console) to do so.
+## Render Deployment
 
-### Configure with the Twilio CLI
+1. Connect your GitHub repository to Render
+2. Create a new Web Service
+3. Set the following:
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Environment Variables**:
+     - `DEEPGRAM_API_KEY`: Your Deepgram API key
+     - `PORT`: 8080 (or leave empty for Render's default)
 
-> Refer to this [Repository](https://github.com/twilio/media-streams/tree/master/node/connect-basic) for more information on this section.
+4. Deploy!
 
-1. Install the [Twilio CLI](https://www.twilio.com/docs/twilio-cli/quickstart) and login to Twilio to run these commands.
+## Twilio Configuration
 
-2. Find an available phone number
-
-```sh
-twilio api:core:available-phone-numbers:local:list --country-code="US" --voice-enabled --properties="phoneNumber"`
+Set your Twilio webhook URL to:
+```
+https://your-render-app.onrender.com/twiml
 ```
 
-3. Purchase the phone number (where `+123456789` is a number you found)
+## Usage
 
-```sh
-twilio api:core:incoming-phone-numbers:create --phone-number="+123456789"`
-```
+1. Call your Twilio phone number
+2. The agent will greet you and collect job request details
+3. The conversation will end when the agent says "Goodbye"
 
-### Set the webhook url to your ngrok url
+## Architecture
 
-4. Start ngrok
-
-On a separate terminal (not the one where you have run `npm run start`):
-
-```sh
-ngrok http 8080
-```
-> If you restart your ngrok server your `ngrok url` will change.
-
-You will see a url under the `Forwarding`row that --> to your localhost. Copy this as the `<ngrok url>`
-
-5. Edit the [templates/streams](templates/streams.xml) file to replace `<ngrok url>` with your ngrok host. Example: `wss://abcdef.ngrok.io/streams`. Remember to use `wss://` and include `/streams` in the url 
-
-6. Go to your Twilio page where you manage your phone number. Under the Configure tab, replace the webhook URL where the call comes in to your ngrok url. Example: `https://abcdef.ngrok-free.app/twiml` . Remember to use `https://` and include `/twiml`
-
-### Call the number and chat to your bot.
-
-7. You can call your Twilio phone number directly. Alternatively, make the call with the following, where `+123456789` is the Twilio number you bought and `+19876543210` is your phone number and `abcdef.ngrok.io` is your ngrok host.
-
-```sh
-twilio api:core:calls:create --from="+123456789" --to="+19876543210" --url="https://abcdef.ngrok.io/twiml"
-```
+- **Express.js**: HTTP server for Twilio webhooks
+- **WebSocket**: Real-time audio streaming
+- **Deepgram Agent API**: Speech recognition, AI processing, and text-to-speech
+- **Twilio Media Streams**: Phone call audio streaming

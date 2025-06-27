@@ -16,6 +16,7 @@ wss.on('connection', async (wsTwilio, req) => {
   let audioBuffer = Buffer.alloc(0);
   let keepAliveInterval;
   let streamSid = null;
+  let isAgentReady = false;
 
   let connection = dg.agent();
 
@@ -37,6 +38,17 @@ wss.on('connection', async (wsTwilio, req) => {
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
     });
+    console.log('✅ Setting agent as ready after Welcome event');
+    isAgentReady = true;
+    
+    // Send any buffered audio
+    if (audioBuffer.length > 0) {
+      console.log(`[📤 Sending ${audioBuffer.length} bytes of buffered audio]`);
+      connection.send(audioBuffer);
+      audioBuffer = Buffer.alloc(0);
+    }
+    
+    console.log(`[🎯 Agent ready to receive audio at ${new Date().toISOString()}]`);
     keepAliveInterval = setInterval(() => connection.keepAlive(), 5000);
   });
 
@@ -70,7 +82,12 @@ wss.on('connection', async (wsTwilio, req) => {
     try {
       const msg = JSON.parse(data);
       if (msg.event === 'media') {
-        connection.send(Buffer.from(msg.media.payload, 'base64'));
+        if (isAgentReady) {
+          connection.send(Buffer.from(msg.media.payload, 'base64'));
+        } else {
+          // If agent not ready, buffer the audio
+          audioBuffer = Buffer.concat([audioBuffer, Buffer.from(msg.media.payload, 'base64')]);
+        }
       } else if (msg.event === 'start') {
         console.log('[🔈 Twilio Media Start]', msg.start);
         streamSid = msg.start.streamSid;
@@ -86,6 +103,14 @@ wss.on('connection', async (wsTwilio, req) => {
     if (keepAliveInterval) {
       clearInterval(keepAliveInterval);
       keepAliveInterval = null;
+    }
+    
+    if (connection) {
+      try {
+        connection.disconnect();
+      } catch (err) {
+        console.error('[⚠️ Error closing Deepgram connection]', err);
+      }
     }
   });
 });
