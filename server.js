@@ -388,7 +388,7 @@ app.post('/twiml', async (req, res) => {
     }
     
     // Create personalized greeting (will be customized in WebSocket connection)
-    const greeting = `You've reached our service. I can take your job request, please wait a moment, our representative will be with you shortly`;
+    const greeting = `You've reached Botie. I can take your job request, please wait a moment, our representative will be with you shortly`;
     const goodbye = `Your job has been recorded by the CSR. Goodbye`;
 
     res.type('text/xml').send(`
