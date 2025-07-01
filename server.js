@@ -163,7 +163,9 @@ function forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, callback) 
       isReady: true,
       audioBuffer: Buffer.alloc(0),
       conversationHistory: [],
-      keepAliveInterval: null
+      keepAliveInterval: null,
+      wsReady: false,
+      audioChunks: []
     };
     
     // Start keep alive
@@ -175,10 +177,18 @@ function forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, callback) 
       }
     }, 5000);
     
-    // Set up event handlers
+    // Set up audio event to buffer audio until WebSocket is ready
     connection.on(AgentEvents.Audio, (chunk) => {
-      // Audio will be sent when WebSocket connects
       console.log(`[🔊 Deepgram audio received for call ${callSid}]`);
+      if (connectionData.wsReady) {
+        // WebSocket is ready, send audio immediately
+        console.log(`[🔊 Sending audio immediately for call ${callSid}]`);
+        // This will be handled by the WebSocket connection
+      } else {
+        // Buffer audio until WebSocket is ready
+        connectionData.audioChunks.push(chunk);
+        console.log(`[📦 Buffering audio chunk for call ${callSid}, total chunks: ${connectionData.audioChunks.length}]`);
+      }
     });
     
     connection.on(AgentEvents.Error, (err) => {
@@ -338,6 +348,7 @@ wss.on('connection', (wsTwilio, req) => {
   let streamSid = null;
   let callSid = null;
   let connectionData = null;
+  let wsReady = false;
 
   wsTwilio.on('message', (data) => {
     try {
@@ -366,6 +377,10 @@ wss.on('connection', (wsTwilio, req) => {
           connectionData = tempTradieData.get(callSid);
           console.log(`[✅ Retrieved connection data for call ${callSid}]`);
           
+          // Mark WebSocket as ready
+          wsReady = true;
+          connectionData.wsReady = true;
+          
           // Send any buffered audio
           if (connectionData && connectionData.audioBuffer.length > 0 && connectionData.isReady) {
             console.log(`[📤 Sending ${connectionData.audioBuffer.length} bytes of buffered audio]`);
@@ -373,10 +388,29 @@ wss.on('connection', (wsTwilio, req) => {
             connectionData.audioBuffer = Buffer.alloc(0);
           }
           
+          // Send any buffered audio chunks from Deepgram
+          if (connectionData.audioChunks.length > 0) {
+            console.log(`[📤 Sending ${connectionData.audioChunks.length} buffered audio chunks to Twilio]`);
+            connectionData.audioChunks.forEach(chunk => {
+              if (streamSid && wsTwilio.readyState === wsTwilio.OPEN) {
+                wsTwilio.send(JSON.stringify({
+                  event: 'media',
+                  streamSid: streamSid,
+                  media: { payload: Buffer.from(chunk).toString('base64') }
+                }));
+              }
+            });
+            connectionData.audioChunks = []; // Clear the buffer
+          }
+          
           // Set up audio output handler for this specific connection
           if (connectionData && connectionData.connection) {
+            // Remove any existing audio listeners to avoid duplicates
+            connectionData.connection.removeAllListeners(AgentEvents.Audio);
+            
             connectionData.connection.on(AgentEvents.Audio, (chunk) => {
-              if (streamSid && wsTwilio.readyState === wsTwilio.OPEN) {
+              console.log(`[🔊 Sending audio to Twilio for call ${callSid}]`);
+              if (streamSid && wsTwilio.readyState === wsTwilio.OPEN && wsReady) {
                 wsTwilio.send(JSON.stringify({
                   event: 'media',
                   streamSid: streamSid,
