@@ -124,23 +124,19 @@ async function sendTaskToAPI(taskData, phoneNumber) {
   }
 }
 
-wss.on('connection', async (wsTwilio, req) => {
-  console.log('[🔗 Twilio WS Connected]');
-  let audioBuffer = Buffer.alloc(0);
-  let keepAliveInterval;
-  let streamSid = null;
-  let isAgentReady = false;
-  let tradieData = null;
-  let conversationHistory = [];
-  let callSid = null;
-  let callerPhoneNumber = null;
+// Function to force invoke Deepgram connection for new calls
+function forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, callback) {
+  console.log(`[🚀 Force invoking Deepgram for call ${callSid}]`);
   
-  let connection = dg.agent();
-
+  // Create new Deepgram connection
+  const connection = dg.agent();
+  let isConnected = false;
+  
   connection.on(AgentEvents.Welcome, () => {
-    console.log('✅ Deepgram Agent Connected');
+    console.log(`[✅ Deepgram Agent Connected for call ${callSid}]`);
+    isConnected = true;
     
-    // Use default configuration initially, will be updated when tradie data is available
+    // Configure agent with default settings
     connection.configure({
       audio: {
         input: { encoding: 'mulaw', sample_rate: 8000 },
@@ -157,98 +153,109 @@ wss.on('connection', async (wsTwilio, req) => {
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
     });
-    console.log('✅ Setting agent as ready after Welcome event');
-    isAgentReady = true;
     
-    // Send any buffered audio
-    if (audioBuffer.length > 0) {
-      console.log(`[📤 Sending ${audioBuffer.length} bytes of buffered audio]`);
-      connection.send(audioBuffer);
-      audioBuffer = Buffer.alloc(0);
-    }
+    // Store connection data for this call
+    const connectionData = {
+      connection: connection,
+      callSid: callSid,
+      phoneNumber: phoneNumber,
+      callerPhoneNumber: callerPhoneNumber,
+      isReady: true,
+      audioBuffer: Buffer.alloc(0),
+      conversationHistory: [],
+      keepAliveInterval: null
+    };
     
-    console.log(`[🎯 Agent ready to receive audio at ${new Date().toISOString()}]`);
-    keepAliveInterval = setInterval(() => connection.keepAlive(), 5000);
-  });
-
-  connection.on(AgentEvents.Audio, (chunk) => {
-    if (streamSid) {
-      wsTwilio.send(JSON.stringify({
-        event: 'media',
-        streamSid: streamSid,
-        media: { payload: Buffer.from(chunk).toString('base64') }
-      }));
-    }
-  });
-
-  connection.on(AgentEvents.Error, (err) => {
-    console.error('[Deepgram Error]', err);
-  });
-
-  connection.on(AgentEvents.ConversationText, (data) => {
-    console.log('[🗣️ Transcription]', JSON.stringify(data, null, 2));
+    // Start keep alive
+    connectionData.keepAliveInterval = setInterval(() => {
+      try {
+        connection.keepAlive();
+      } catch (err) {
+        console.error('[⚠️ Keep alive error]', err);
+      }
+    }, 5000);
     
-    // Track conversation history
-    conversationHistory.push({
-      role: data.role,
-      content: data.content,
-      timestamp: new Date().toISOString()
+    // Set up event handlers
+    connection.on(AgentEvents.Audio, (chunk) => {
+      // Audio will be sent when WebSocket connects
+      console.log(`[🔊 Deepgram audio received for call ${callSid}]`);
     });
     
-    if (data.role == "assistant" && data.content == "BYE") {
-      console.log('[👋 Closing connection after goodbye]');
-
-      if (wsTwilio && wsTwilio.readyState === wsTwilio.OPEN) {
-        wsTwilio.close();
-      }
-    }
-  });
-
-  wsTwilio.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data);
-      if (msg.event === 'media') {
-        if (isAgentReady) {
-          connection.send(Buffer.from(msg.media.payload, 'base64'));
-        } else {
-          // If agent not ready, buffer the audio
-          audioBuffer = Buffer.concat([audioBuffer, Buffer.from(msg.media.payload, 'base64')]);
-        }
-      } else if (msg.event === 'start') {
-        console.log('[🔈 Twilio Media Start]', msg.start);
-        streamSid = msg.start.streamSid;
-        callSid = msg.start.callSid;
-        
-        // Retrieve tradie data and caller phone number using Call SID to ensure we get the correct data for this call
-        if (callSid && tempTradieData.has(callSid)) {
-          tradieData = tempTradieData.get(callSid);
-          const phoneNumber = callSidToPhone.get(callSid);
-          callerPhoneNumber = callSidToCaller.get(callSid);
-          console.log(`[✅ Retrieved tradie data for call ${callSid}, phone: ${phoneNumber}, caller: ${callerPhoneNumber}]`);
-        } else {
-          console.log(`[⚠️ No tradie data found for call SID: ${callSid}]`);
-        }
-      }
-    } catch (err) {
-      console.error('[⚠️ WS Parse Error]', err);
-    }
-  });
-
-  wsTwilio.on('close', async () => {
-    console.log('[🔌 Twilio WS Disconnected]');
-
-    // Create task if we have conversation data and tradie data
-    if (conversationHistory.length > 0 && tradieData) {
-      console.log('[📋 Processing conversation data for task creation]');
+    connection.on(AgentEvents.Error, (err) => {
+      console.error(`[❌ Deepgram Error for call ${callSid}]`, err);
+    });
+    
+    connection.on(AgentEvents.ConversationText, (data) => {
+      console.log(`[🗣️ Transcription for call ${callSid}]`, JSON.stringify(data, null, 2));
       
-      try {
-        // Create a conversation summary for AI analysis
-        const conversationText = conversationHistory
-          .map(entry => `${entry.role}: ${entry.content}`)
-          .join('\n');
-        
-        // Simple prompt to ChatGPT
-        const aiPrompt = `Based on this conversation, create a JSON payload for a task:
+      // Track conversation history
+      connectionData.conversationHistory.push({
+        role: data.role,
+        content: data.content,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (data.role == "assistant" && data.content == "BYE") {
+        console.log(`[👋 Closing connection after goodbye for call ${callSid}]`);
+        cleanupConnection(connectionData);
+      }
+    });
+    
+    // Store connection data globally
+    tempTradieData.set(callSid, connectionData);
+    
+    callback(connectionData, null);
+  });
+  
+  connection.on(AgentEvents.Error, (err) => {
+    console.error(`[❌ Deepgram connection error for call ${callSid}]`, err);
+    if (!isConnected) {
+      callback(null, err.message || 'Connection failed');
+    }
+  });
+}
+
+// Function to cleanup connection
+function cleanupConnection(connectionData) {
+  if (!connectionData) return;
+  
+  console.log(`[🧹 Cleaning up connection for call ${connectionData.callSid}]`);
+  
+  if (connectionData.keepAliveInterval) {
+    clearInterval(connectionData.keepAliveInterval);
+  }
+  
+  if (connectionData.connection) {
+    try {
+      connectionData.connection.disconnect();
+    } catch (err) {
+      console.error('[⚠️ Error closing Deepgram connection]', err);
+    }
+  }
+  
+  // Process conversation data if available
+  if (connectionData.conversationHistory.length > 0) {
+    processConversationData(connectionData);
+  }
+  
+  // Clean up from storage
+  tempTradieData.delete(connectionData.callSid);
+  callSidToPhone.delete(connectionData.callSid);
+  callSidToCaller.delete(connectionData.callSid);
+}
+
+// Function to process conversation data
+function processConversationData(connectionData) {
+  console.log(`[📋 Processing conversation data for call ${connectionData.callSid}]`);
+  
+  try {
+    // Create a conversation summary for AI analysis
+    const conversationText = connectionData.conversationHistory
+      .map(entry => `${entry.role}: ${entry.content}`)
+      .join('\n');
+    
+    // Simple prompt to ChatGPT
+    const aiPrompt = `Based on this conversation, create a JSON payload for a task:
 
 Conversation:
 ${conversationText}
@@ -258,92 +265,141 @@ Create a JSON with:
 - summary: Brief job description  
 - description: Description of the task/issue (not the full conversation)
 - conversation: The complete conversation as a string
-- customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
+- customer: { name, address, phoneNumber: "${connectionData.callerPhoneNumber || ''}" }
 - isResolved: false
 
 Return only the JSON.`;
 
-        // Call ChatGPT API
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
+    // Call ChatGPT API
+    fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-nano',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that creates task JSON from conversations. Return only valid JSON.'
           },
-          body: JSON.stringify({
-            model: 'gpt-4.1-nano',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful assistant that creates task JSON from conversations. Return only valid JSON.'
-              },
-              {
-                role: 'user',
-                content: aiPrompt
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 500
-          })
+          {
+            role: 'user',
+            content: aiPrompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 500
+      })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`ChatGPT API failed: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(result => {
+      const aiResponse = result.choices[0].message.content;
+      
+      // Extract JSON from AI response
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in AI response');
+      }
+      
+      const taskData = JSON.parse(jsonMatch[0]);
+      console.log(`[📤 Task data extracted for call ${connectionData.callSid}:`, taskData, ']');
+      
+      // Send task to API using the tradie's phone number
+      const tradiePhoneNumber = connectionData.phoneNumber;
+      if (tradiePhoneNumber) {
+        sendTaskToAPI(taskData, tradiePhoneNumber).then(result => {
+          if (result) {
+            console.log(`[✅ Task created successfully in API for call ${connectionData.callSid}]`);
+          } else {
+            console.log(`[❌ Failed to create task in API for call ${connectionData.callSid}]`);
+          }
         });
+      } else {
+        console.log(`[❌ No tradie phone number available for task creation for call ${connectionData.callSid}]`);
+      }
+    })
+    .catch(error => {
+      console.error(`[❌ Error extracting conversation data for call ${connectionData.callSid}:`, error, ']');
+    });
+  } catch (error) {
+    console.error(`[❌ Error processing conversation data for call ${connectionData.callSid}:`, error, ']');
+  }
+}
 
-        if (!response.ok) {
-          throw new Error(`ChatGPT API failed: ${response.status}`);
-        }
+wss.on('connection', (wsTwilio, req) => {
+  console.log('[🔗 Twilio WS Connected]');
+  let streamSid = null;
+  let callSid = null;
+  let connectionData = null;
 
-        const result = await response.json();
-        const aiResponse = result.choices[0].message.content;
-        
-        // Extract JSON from AI response
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error('No JSON found in AI response');
-        }
-        
-        const taskData = JSON.parse(jsonMatch[0]);
-        console.log('[📤 Task data extracted:', taskData, ']');
-        
-        // Send task to API using the tradie's phone number
-        const tradiePhoneNumber = tradieData?.data?.twilioPhoneNumber || tradieData?.twilioPhoneNumber;
-        if (tradiePhoneNumber) {
-          sendTaskToAPI(taskData, tradiePhoneNumber).then(result => {
-            if (result) {
-              console.log('[✅ Task created successfully in API]');
-            } else {
-              console.log('[❌ Failed to create task in API]');
+  wsTwilio.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data);
+      if (msg.event === 'media') {
+        // Get connection data for this call
+        if (callSid && tempTradieData.has(callSid)) {
+          connectionData = tempTradieData.get(callSid);
+          if (connectionData && connectionData.isReady && connectionData.connection) {
+            // Send audio to Deepgram
+            connectionData.connection.send(Buffer.from(msg.media.payload, 'base64'));
+          } else {
+            // Buffer audio if connection not ready
+            if (connectionData) {
+              connectionData.audioBuffer = Buffer.concat([connectionData.audioBuffer, Buffer.from(msg.media.payload, 'base64')]);
             }
-          });
-        } else {
-          console.log('[❌ No tradie phone number available for task creation]');
+          }
         }
-      } catch (error) {
-        console.error('[❌ Error extracting conversation data:', error, ']');
+      } else if (msg.event === 'start') {
+        console.log('[🔈 Twilio Media Start]', msg.start);
+        streamSid = msg.start.streamSid;
+        callSid = msg.start.callSid;
+        
+        // Get connection data for this call
+        if (callSid && tempTradieData.has(callSid)) {
+          connectionData = tempTradieData.get(callSid);
+          console.log(`[✅ Retrieved connection data for call ${callSid}]`);
+          
+          // Send any buffered audio
+          if (connectionData && connectionData.audioBuffer.length > 0 && connectionData.isReady) {
+            console.log(`[📤 Sending ${connectionData.audioBuffer.length} bytes of buffered audio]`);
+            connectionData.connection.send(connectionData.audioBuffer);
+            connectionData.audioBuffer = Buffer.alloc(0);
+          }
+          
+          // Set up audio output handler for this specific connection
+          if (connectionData && connectionData.connection) {
+            connectionData.connection.on(AgentEvents.Audio, (chunk) => {
+              if (streamSid && wsTwilio.readyState === wsTwilio.OPEN) {
+                wsTwilio.send(JSON.stringify({
+                  event: 'media',
+                  streamSid: streamSid,
+                  media: { payload: Buffer.from(chunk).toString('base64') }
+                }));
+              }
+            });
+          }
+        } else {
+          console.log(`[⚠️ No connection data found for call SID: ${callSid}]`);
+        }
       }
-    } else {
-      console.log('[❌ No conversation history or tradie data available for task creation]');
-      console.log('[📋 Conversation history length:', conversationHistory.length, ']');
-      console.log('[📋 Tradie data available:', !!tradieData, ']');
+    } catch (err) {
+      console.error('[⚠️ WS Parse Error]', err);
     }
+  });
 
-    // Clean up tradie data for this specific call
-    if (callSid) {
-      tempTradieData.delete(callSid);
-      callSidToPhone.delete(callSid);
-      callSidToCaller.delete(callSid);
-      console.log(`[🧹 Cleaned up tradie data for call ${callSid}]`);
-    }
-
-    if (keepAliveInterval) {
-      clearInterval(keepAliveInterval);
-      keepAliveInterval = null;
-    }
+  wsTwilio.on('close', () => {
+    console.log('[🔌 Twilio WS Disconnected]');
     
-    if (connection) {
-      try {
-        connection.disconnect();
-      } catch (err) {
-        console.error('[⚠️ Error closing Deepgram connection]', err);
-      }
+    // Clean up connection data for this specific call
+    if (callSid && connectionData) {
+      cleanupConnection(connectionData);
     }
   });
 });
@@ -360,59 +416,42 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-app.post('/twiml', async (req, res) => {
-  try {
-    // Extract the phone number and Call SID from Twilio request
-    const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
-    const callSid = req.body.CallSid;
-    const callerPhoneNumber = decodeURIComponent(req.body.From || '');
-    
-    console.log(`[📱 Phone number being called: ${phoneNumber}]`);
-    console.log(`[📞 Call SID: ${callSid}]`);
-    console.log(`[📞 Caller phone number: ${callerPhoneNumber}]`);
-    
-    // Fetch tradie data when call starts
-    let tradieData = null;
-    if (phoneNumber) {
-      console.log(`[🔍 Fetching tradie data for phone number: ${phoneNumber}]`);
-      tradieData = await getTradieData(phoneNumber);
-      if (tradieData) {
-        console.log(`[✅ Tradie data fetched successfully for ${phoneNumber}]`);
-        // Store tradie data with Call SID as key to avoid interference between calls
-        tempTradieData.set(callSid, tradieData);
-        callSidToPhone.set(callSid, phoneNumber);
-        callSidToCaller.set(callSid, callerPhoneNumber);
-      } else {
-        console.log(`[❌ No tradie data found for phone number: ${phoneNumber}]`);
-      }
+app.post('/twiml', (req, res) => {
+  // Extract the phone number and Call SID from Twilio request
+  const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
+  const callSid = req.body.CallSid;
+  const callerPhoneNumber = decodeURIComponent(req.body.From || '');
+  
+  console.log(`[📱 Phone number being called: ${phoneNumber}]`);
+  console.log(`[📞 Call SID: ${callSid}]`);
+  console.log(`[📞 Caller phone number: ${callerPhoneNumber}]`);
+  
+  // Store call information for WebSocket connection
+  callSidToPhone.set(callSid, phoneNumber);
+  callSidToCaller.set(callSid, callerPhoneNumber);
+  
+  // Force invoke Deepgram connection immediately
+  forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, (connectionData, error) => {
+    if (error) {
+      console.log(`[❌ Deepgram connection failed for call ${callSid}: ${error}]`);
+    } else {
+      console.log(`[✅ Deepgram connection established for call ${callSid}]`);
     }
-    
-    // Create personalized greeting (will be customized in WebSocket connection)
-    const greeting = `You've reached Botie. I can take your job request, please wait a moment, our representative will be with you shortly`;
-    const goodbye = `Your job has been recorded by the CSR. Goodbye`;
+  });
+  
+  // Create personalized greeting
+  const greeting = `You've reached Botie. I can take your job request, please wait a moment, our representative will be with you shortly`;
+  const goodbye = `Your job has been recorded by the CSR. Goodbye`;
 
-    res.type('text/xml').send(`
-      <Response>
-        <Say language="en-AU">${greeting}</Say>
-        <Connect>
-          <Stream url="wss://${req.headers.host}/twilio" />
-        </Connect>
-        <Say language="en-AU">${goodbye}</Say>
-      </Response>
-    `);
-  } catch (error) {
-    console.error('[❌ Error in TwiML endpoint:]', error);
-    // Fallback response
-    res.type('text/xml').send(`
-      <Response>
-        <Say language="en-AU">You've reached Botie, I can take your job request, please wait a moment, our representative will be with you shortly</Say>
-        <Connect>
-          <Stream url="wss://${req.headers.host}/twilio" />
-        </Connect>
-        <Say language="en-AU">Your job has been recorded by the CSR. Goodbye</Say>
-      </Response>
-    `);
-  }
+  res.type('text/xml').send(`
+    <Response>
+      <Say language="en-AU">${greeting}</Say>
+      <Connect>
+        <Stream url="wss://${req.headers.host}/twilio" />
+      </Connect>
+      <Say language="en-AU">${goodbye}</Say>
+    </Response>
+  `);
 });
 
 // Test endpoint for API key authentication
