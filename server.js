@@ -185,7 +185,7 @@ wss.on('connection', async (wsTwilio, req) => {
     console.error('[Deepgram Error]', err);
   });
 
-  connection.on(AgentEvents.ConversationText, async (data) => {
+  connection.on(AgentEvents.ConversationText, (data) => {
     console.log('[🗣️ Transcription]', JSON.stringify(data, null, 2));
     
     // Track conversation history
