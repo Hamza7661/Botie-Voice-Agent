@@ -350,7 +350,7 @@ Return only the JSON.`;
 
 server.on('upgrade', (req, socket, head) => {
   console.log('[UPGRADE]', req.url);
-  if (req.url.startsWith('/twilio')) {
+  if (req.url === '/twilio') {
     wss.handleUpgrade(req, socket, head, (ws) => {
       console.log('[✅ WebSocket upgraded]');
       wss.emit('connection', ws, req);
