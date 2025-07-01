@@ -409,7 +409,6 @@ wss.on('connection', (wsTwilio, req) => {
             connectionData.connection.removeAllListeners(AgentEvents.Audio);
             
             connectionData.connection.on(AgentEvents.Audio, (chunk) => {
-              console.log(`[🔊 Sending audio to Twilio for call ${callSid}]`);
               if (streamSid && wsTwilio.readyState === wsTwilio.OPEN && wsReady) {
                 wsTwilio.send(JSON.stringify({
                   event: 'media',
