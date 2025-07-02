@@ -38,7 +38,9 @@ async function getTradieData(phoneNumber) {
     const headers = generateAuthHeaders();
     headers['assigned-number'] = phoneNumber;
     const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/getuserbyassignednumber`, { headers });
-    return res.ok ? await res.json() : null;
+    const data = res.ok ? await res.json() : null;
+    console.log(`[📞 Tradie data fetched for ${phoneNumber}]:`, data);
+    return data;
   } catch (err) {
     console.error('❌ Tradie API Error:', err);
     return null;
@@ -54,16 +56,18 @@ async function createTask(taskData, phoneNumber) {
       headers,
       body: JSON.stringify(taskData)
     });
-    return res.ok ? await res.json() : null;
+    const data = res.ok ? await res.json() : null;
+    console.log(`[✅ Task created for ${phoneNumber}]:`, data);
+    return data;
   } catch (err) {
     console.error('❌ Task API Error:', err);
     return null;
   }
 }
 
-async function summarizeConversation(convo, callerPhoneNumber) {
+async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
-  const prompt = `Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
+  const prompt = `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -84,10 +88,12 @@ async function summarizeConversation(convo, callerPhoneNumber) {
 
   const result = await res.json();
   const match = result.choices[0].message.content.match(/\{[\s\S]*\}/);
-  return match ? JSON.parse(match[0]) : null;
+  const task = match ? JSON.parse(match[0]) : null;
+  console.log(`[📋 Task summary generated]:`, task);
+  return task;
 }
 
-function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber) {
+function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
   const agent = dg.agent();
   const conversation = [];
 
@@ -103,7 +109,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: 'You are a helpful agent. Ask the customer name, address, and issue. When done, say BYE.'
+          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye'`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
@@ -124,9 +130,8 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber) {
 
   agent.on(AgentEvents.ConversationText, async data => {
     conversation.push(data);
-    if (data.role === 'assistant' && data.content === 'BYE') {
-      const tradie = await getTradieData(phoneNumber);
-      const task = await summarizeConversation(conversation, callerPhoneNumber);
+    if (data.role === 'assistant' && data.content.includes('Goodbye')) {
+      const task = await summarizeConversation(conversation, callerPhoneNumber, tradie);
       if (tradie && task) await createTask(task, phoneNumber);
       agent.disconnect();
       activeCalls.get(callSid)?.ws.close();
@@ -148,7 +153,8 @@ wss.on('connection', (ws, req) => {
       callSid = data.start.callSid;
       const phoneNumber = decodeURIComponent(data.start.to || '');
       const caller = decodeURIComponent(data.start.from || '');
-      const agent = createDeepgramAgent(callSid, phoneNumber, caller);
+      const tradie = await getTradieData(phoneNumber);
+      const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
       activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
 
     } else if (data.event === 'media' && callSid) {
@@ -176,7 +182,7 @@ app.post('/twiml', (req, res) => {
   const host = req.headers.host;
   res.type('text/xml').send(`
     <Response>
-      <Say language="en-AU">Welcome to Botie. Please wait while we connect you.</Say>
+      <Say language="en-AU">You've reached Botie, Please wait for a moment, a CSR will be with you shortly.</Say>
       <Connect>
         <Stream url="wss://${host}/twilio" />
       </Connect>
