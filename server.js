@@ -151,7 +151,8 @@ wss.on('connection', (ws, req) => {
 
     if (data.event === 'start') {
       callSid = data.start.callSid;
-      const phoneNumber = decodeURIComponent(data.start.called || data.start.to || '');
+      const phoneNumber = decodeURIComponent(data.start.to || data.start.called || '');
+      console.log('[🔎 Incoming call details]', { to: data.start.to, called: data.start.called, from: data.start.from });
       const caller = decodeURIComponent(data.start.from || '');
       const tradie = await getTradieData(phoneNumber);
       const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
