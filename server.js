@@ -182,6 +182,8 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 app.post('/twiml', (req, res) => {
+  console.log('✅ /twiml endpoint hit');
+  console.log('[📨 Raw Twilio Body]', req.body);
   const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
   const callSid = req.body.CallSid;
   const callerPhoneNumber = decodeURIComponent(req.body.From || '');
