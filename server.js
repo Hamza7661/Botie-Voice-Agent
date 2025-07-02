@@ -117,7 +117,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
   - conversation: The complete conversation as a string
-  - customer: { name, address, phoneNumber: "${connectionData.callerPhoneNumber || ''}" }
+  - customer: { name, address, phoneNumber: "${tradie?.data?.phoneNumber || ''}" }
   - isResolved: false
 
   Return only the JSON.`;
