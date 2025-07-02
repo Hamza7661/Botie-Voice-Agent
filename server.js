@@ -69,7 +69,7 @@ async function createTask(taskData, phoneNumber) {
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
-  const prompt = `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
+  const prompt = `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Try to keep it to the point dont engage too much. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -155,7 +155,6 @@ wss.on('connection', (ws, req) => {
       callSid = data.start.callSid;
       const phoneNumber = callSidToPhone.get(callSid) || '';
       const caller = decodeURIComponent(data.start.from || '');
-      console.log('[🔎 WS start event]', { callSid, phoneNumber, caller });
       const tradie = await getTradieData(phoneNumber);
       const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
       activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
@@ -182,16 +181,11 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 app.post('/twiml', (req, res) => {
-  console.log('✅ /twiml endpoint hit');
-  console.log('[📨 Raw Twilio Body]', req.body);
   const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
   const callSid = req.body.CallSid;
   const callerPhoneNumber = decodeURIComponent(req.body.From || '');
 
   callSidToPhone.set(callSid, phoneNumber);
-
-  console.log('[📲 TwiML Request]', { callSid, phoneNumber, callerPhoneNumber });
-
   const host = req.headers.host;
   res.type('text/xml').send(`
     <Response>
