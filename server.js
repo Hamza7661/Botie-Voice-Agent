@@ -86,7 +86,7 @@ async function sendTaskToAPI(taskData, phoneNumber) {
     });
 
     if (!response.ok) {
-      throw new Error('Http error: ' + response.status);
+      throw new Error('Http error: ' + response);
     }
 
     const result = await response.json();
@@ -243,7 +243,6 @@ wss.on('connection', (ws, req) => {
       callSid = data.start.callSid;
       const phoneNumber = callSidToPhone.get(callSid) || '';
       const caller = callSidToCaller.get(callSid) || decodeURIComponent(data.start.from || '');
-      console.log('[🔎 WS start event]', { callSid, phoneNumber, caller });
       const tradie = await getTradieData(phoneNumber);
       const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
       activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
@@ -276,8 +275,6 @@ app.post('/twiml', (req, res) => {
 
   callSidToPhone.set(callSid, phoneNumber);
   callSidToCaller.set(callSid, callerPhoneNumber);
-
-  console.log('[📲 TwiML Request]', { callSid, phoneNumber, callerPhoneNumber });
 
   const host = req.headers.host;
   res.type('text/xml').send(`
