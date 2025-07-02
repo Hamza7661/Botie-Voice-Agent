@@ -86,7 +86,7 @@ async function sendTaskToAPI(taskData, phoneNumber) {
     });
 
     if (!response.ok) {
-      throw new Error('Http error: ' + response);
+      throw new Error('Http error: ', response);
     }
 
     const result = await response.json();
@@ -164,7 +164,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       console.log(`[📤 Task data extracted for call:`, taskData, ']');
 
       // Send task to API using the tradie's phone number
-      const tradiePhoneNumber = tradie?.data?.phoneNumber;
+      const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
       if (tradiePhoneNumber) {
         sendTaskToAPI(taskData, tradiePhoneNumber).then(result => {
           if (result) {
@@ -174,11 +174,11 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
           }
         });
       } else {
-        console.log(`[❌ No tradie phone number available for task creation for call ${connectionData.callSid}]`);
+        console.log(`[❌ No tradie phone number available for task creation for call ${callerPhoneNumber}]`);
       }
     })
     .catch(error => {
-      console.error(`[❌ Error extracting conversation data for call ${connectionData.callSid}:`, error, ']');
+      console.error(`[❌ Error extracting conversation data for call ${callerPhoneNumber}:`, error, ']');
     });
 }
 
