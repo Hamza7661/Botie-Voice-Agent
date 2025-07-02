@@ -15,8 +15,10 @@ const wss = new WebSocketServer({ noServer: true });
 const dg = createClient(process.env.DEEPGRAM_API_KEY);
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const activeCalls = new Map();
+const callSidToPhone = new Map();
 
 function generateAuthHeaders() {
   const timestamp = Date.now().toString();
@@ -151,9 +153,9 @@ wss.on('connection', (ws, req) => {
 
     if (data.event === 'start') {
       callSid = data.start.callSid;
-      const phoneNumber = decodeURIComponent(data.start.to || data.start.called || '');
-      console.log('[🔎 Incoming call details]', { to: data.start.to, called: data.start.called, from: data.start.from });
+      const phoneNumber = callSidToPhone.get(callSid) || '';
       const caller = decodeURIComponent(data.start.from || '');
+      console.log('[🔎 WS start event]', { callSid, phoneNumber, caller });
       const tradie = await getTradieData(phoneNumber);
       const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
       activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
@@ -180,6 +182,14 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 app.post('/twiml', (req, res) => {
+  const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
+  const callSid = req.body.CallSid;
+  const callerPhoneNumber = decodeURIComponent(req.body.From || '');
+
+  callSidToPhone.set(callSid, phoneNumber);
+
+  console.log('[📲 TwiML Request]', { callSid, phoneNumber, callerPhoneNumber });
+
   const host = req.headers.host;
   res.type('text/xml').send(`
     <Response>
