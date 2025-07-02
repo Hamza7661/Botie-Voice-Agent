@@ -1,3 +1,4 @@
+// deepgram-botie-server.js
 import http from 'http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -14,11 +15,8 @@ const wss = new WebSocketServer({ noServer: true });
 const dg = createClient(process.env.DEEPGRAM_API_KEY);
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-const tempTradieData = new Map();
-const callSidToPhone = new Map();
-const callSidToCaller = new Map();
+const activeCalls = new Map();
 
 function generateAuthHeaders() {
   const timestamp = Date.now().toString();
@@ -27,7 +25,6 @@ function generateAuthHeaders() {
     .createHmac('sha256', process.env.API_SHARED_SECRET)
     .update(`${apiKey}:${timestamp}`)
     .digest('hex');
-
   return {
     'x-api-key': apiKey,
     'x-timestamp': timestamp,
@@ -36,134 +33,39 @@ function generateAuthHeaders() {
   };
 }
 
-function validateApiKeyAuth(req) {
-  const apiKey = req.headers['x-api-key'];
-  const timestamp = req.headers['x-timestamp'];
-  const signature = req.headers['x-signature'];
-
-  if (!apiKey || !timestamp || !signature) {
-    return { valid: false, error: 'Missing required authentication headers' };
-  }
-
-  const now = Date.now();
-  const requestTime = parseInt(timestamp);
-  if (Math.abs(now - requestTime) > 5 * 60 * 1000) {
-    return { valid: false, error: 'Timestamp expired or too far in future' };
-  }
-
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.API_SHARED_SECRET)
-    .update(`${apiKey}:${timestamp}`)
-    .digest('hex');
-
-  if (signature !== expectedSignature) {
-    return { valid: false, error: 'Invalid signature' };
-  }
-
-  return { valid: true };
-}
-
 async function getTradieData(phoneNumber) {
   try {
     const headers = generateAuthHeaders();
-    const response = await fetch(`${process.env.BOTIE_API_BASE_URL}/getuserbyassignednumber`, {
-      method: 'GET',
-      headers: { ...headers, 'assigned-number': phoneNumber }
-    });
-    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-    return await response.json();
+    headers['assigned-number'] = phoneNumber;
+    const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/getuserbyassignednumber`, { headers });
+    return res.ok ? await res.json() : null;
   } catch (err) {
-    console.error('Error fetching tradie data:', err);
+    console.error('❌ Tradie API Error:', err);
     return null;
   }
 }
 
-async function sendTaskToAPI(taskData, phoneNumber) {
+async function createTask(taskData, phoneNumber) {
   try {
     const headers = generateAuthHeaders();
     headers['assigned-number'] = phoneNumber;
-    const response = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task-for-user`, {
+    const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task-for-user`, {
       method: 'POST',
       headers,
       body: JSON.stringify(taskData)
     });
-    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-    return await response.json();
+    return res.ok ? await res.json() : null;
   } catch (err) {
-    console.error('Error sending task:', err);
+    console.error('❌ Task API Error:', err);
     return null;
   }
 }
 
-function forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, callback) {
-  const connection = dg.agent();
-  let isConnected = false;
+async function summarizeConversation(convo, callerPhoneNumber) {
+  const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
+  const prompt = `Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
 
-  connection.on(AgentEvents.Welcome, () => {
-    isConnected = true;
-    const connectionData = {
-      connection,
-      callSid,
-      phoneNumber,
-      callerPhoneNumber,
-      isReady: true,
-      audioBuffer: Buffer.alloc(0),
-      conversationHistory: [],
-      keepAliveInterval: setInterval(() => connection.keepAlive(), 5000),
-      wsReady: false,
-      audioChunks: [],
-      ws: null,
-      streamSid: null
-    };
-
-    connection.on(AgentEvents.Audio, (chunk) => {
-      if (connectionData.wsReady && connectionData.ws && connectionData.ws.readyState === connectionData.ws.OPEN) {
-        connectionData.ws.send(JSON.stringify({
-          event: 'media',
-          streamSid: connectionData.streamSid,
-          media: { payload: Buffer.from(chunk).toString('base64') }
-        }));
-      } else {
-        connectionData.audioChunks.push(chunk);
-      }
-    });
-
-    connection.on(AgentEvents.ConversationText, (data) => {
-      console.log('[🎤 Deepgram Response Received]:', JSON.stringify(data, null, 2));
-      connectionData.conversationHistory.push({
-        role: data.role,
-        content: data.content,
-        timestamp: new Date().toISOString()
-      });
-      if (data.role === 'assistant' && data.content === 'BYE') cleanupConnection(connectionData);
-    });
-
-    connection.on(AgentEvents.Error, err => console.error('Deepgram Error:', err));
-
-    tempTradieData.set(callSid, connectionData);
-    callback(connectionData, null);
-  });
-
-  connection.on(AgentEvents.Error, err => {
-    if (!isConnected) callback(null, err.message);
-  });
-}
-
-function cleanupConnection(connectionData) {
-  if (!connectionData) return;
-  clearInterval(connectionData.keepAliveInterval);
-  try { connectionData.connection.disconnect(); } catch (err) {}
-  if (connectionData.conversationHistory.length > 0) processConversationData(connectionData);
-  tempTradieData.delete(connectionData.callSid);
-  callSidToPhone.delete(connectionData.callSid);
-  callSidToCaller.delete(connectionData.callSid);
-}
-
-function processConversationData(connectionData) {
-  const conversationText = connectionData.conversationHistory.map(e => `${e.role}: ${e.content}`).join('\n');
-  const prompt = `Based on this conversation, create a JSON payload for a task:\n${conversationText}`;
-
-  fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -172,95 +74,115 @@ function processConversationData(connectionData) {
     body: JSON.stringify({
       model: 'gpt-4.1-nano',
       messages: [
-        { role: 'system', content: 'You are a helpful assistant. Return only valid JSON.' },
+        { role: 'system', content: 'Return only JSON. No explanation.' },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.3,
+      temperature: 0.2,
       max_tokens: 500
     })
-  })
-    .then(res => res.json())
-    .then(result => {
-      const match = result.choices[0].message.content.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('No JSON found');
-      const taskData = JSON.parse(match[0]);
-      sendTaskToAPI(taskData, connectionData.phoneNumber);
-    })
-    .catch(err => console.error('Conversation processing error:', err));
+  });
+
+  const result = await res.json();
+  const match = result.choices[0].message.content.match(/\{[\s\S]*\}/);
+  return match ? JSON.parse(match[0]) : null;
 }
 
-wss.on('connection', (wsTwilio, req) => {
-  let streamSid = null, callSid = null, connectionData = null;
+function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber) {
+  const agent = dg.agent();
+  const conversation = [];
 
-  wsTwilio.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data);
-      if (msg.event === 'start') {
-        streamSid = msg.start.streamSid;
-        callSid = msg.start.callSid;
-        connectionData = tempTradieData.get(callSid);
-        if (connectionData) {
-          connectionData.ws = wsTwilio;
-          connectionData.streamSid = streamSid;
-          connectionData.wsReady = true;
-          if (connectionData.audioBuffer.length > 0) {
-            connectionData.connection.send(connectionData.audioBuffer);
-            connectionData.audioBuffer = Buffer.alloc(0);
-          }
-          connectionData.audioChunks.forEach(chunk => {
-            wsTwilio.send(JSON.stringify({
-              event: 'media',
-              streamSid,
-              media: { payload: Buffer.from(chunk).toString('base64') }
-            }));
-          });
-          connectionData.audioChunks = [];
-        }
-      } else if (msg.event === 'media' && connectionData?.connection) {
-        connectionData.connection.send(Buffer.from(msg.media.payload, 'base64'));
+  agent.on(AgentEvents.Welcome, () => {
+    agent.configure({
+      audio: {
+        input: { encoding: 'mulaw', sample_rate: 8000 },
+        output: { encoding: 'mulaw', sample_rate: 8000 }
+      },
+      agent: {
+        language: 'en',
+        greeting: 'Hi. How can I help you today?',
+        listen: { provider: { type: 'deepgram', model: 'nova-3' } },
+        think: {
+          provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
+          prompt: 'You are a helpful agent. Ask the customer name, address, and issue. When done, say BYE.'
+        },
+        speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
-    } catch (err) {
-      console.error('WS error:', err);
+    });
+  });
+
+  agent.on(AgentEvents.Audio, chunk => {
+    const ws = activeCalls.get(callSid)?.ws;
+    const streamSid = activeCalls.get(callSid)?.streamSid;
+    if (ws && ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        event: 'media',
+        streamSid,
+        media: { payload: Buffer.from(chunk).toString('base64') }
+      }));
     }
   });
 
-  wsTwilio.on('close', () => {
-    if (connectionData) cleanupConnection(connectionData);
+  agent.on(AgentEvents.ConversationText, async data => {
+    conversation.push(data);
+    if (data.role === 'assistant' && data.content === 'BYE') {
+      const tradie = await getTradieData(phoneNumber);
+      const task = await summarizeConversation(conversation, callerPhoneNumber);
+      if (tradie && task) await createTask(task, phoneNumber);
+      agent.disconnect();
+      activeCalls.get(callSid)?.ws.close();
+      activeCalls.delete(callSid);
+    }
+  });
+
+  agent.on(AgentEvents.Error, err => console.error(`[Deepgram Error ${callSid}]`, err));
+  return agent;
+}
+
+wss.on('connection', (ws, req) => {
+  let callSid = null;
+
+  ws.on('message', async msg => {
+    const data = JSON.parse(msg);
+
+    if (data.event === 'start') {
+      callSid = data.start.callSid;
+      const phoneNumber = decodeURIComponent(data.start.to || '');
+      const caller = decodeURIComponent(data.start.from || '');
+      const agent = createDeepgramAgent(callSid, phoneNumber, caller);
+      activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
+
+    } else if (data.event === 'media' && callSid) {
+      activeCalls.get(callSid)?.agent.send(Buffer.from(data.media.payload, 'base64'));
+    }
+  });
+
+  ws.on('close', () => {
+    if (callSid) {
+      activeCalls.get(callSid)?.agent.disconnect();
+      activeCalls.delete(callSid);
+    }
   });
 });
 
 server.on('upgrade', (req, socket, head) => {
   if (req.url === '/twilio') {
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
   } else {
     socket.destroy();
   }
 });
 
 app.post('/twiml', (req, res) => {
-  const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
-  const callSid = req.body.CallSid;
-  const callerPhoneNumber = decodeURIComponent(req.body.From || '');
-
-  callSidToPhone.set(callSid, phoneNumber);
-  callSidToCaller.set(callSid, callerPhoneNumber);
-
-  forceInvokeDeepgram(callSid, phoneNumber, callerPhoneNumber, () => {});
-
+  const host = req.headers.host;
   res.type('text/xml').send(`
     <Response>
-      <Say language="en-AU">You've reached Botie. I can take your job request, please wait a moment, our representative will be with you shortly</Say>
-      <Connect><Stream url="wss://${req.headers.host}/twilio" /></Connect>
-      <Say language="en-AU">Your job has been recorded by the CSR. Goodbye</Say>
+      <Say language="en-AU">Welcome to Botie. Please wait while we connect you.</Say>
+      <Connect>
+        <Stream url="wss://${host}/twilio" />
+      </Connect>
     </Response>
   `);
 });
 
-app.get('/test-api-auth', (req, res) => {
-  const validation = validateApiKeyAuth(req);
-  if (!validation.valid) return res.status(401).json({ success: false, error: validation.error });
-  res.json({ success: true, message: 'API key authentication successful' });
-});
-
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`✅ Botie Deepgram server ready on port ${PORT}`));
