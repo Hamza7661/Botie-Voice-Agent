@@ -112,7 +112,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye'`
+          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
@@ -133,7 +133,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
 
   agent.on(AgentEvents.ConversationText, async data => {
     conversation.push(data);
-    if (data.role === 'assistant' && data.content.includes('Goodbye')) {
+    if (data.role === 'assistant' && data.content == 'Goodbye') {
       const task = await summarizeConversation(conversation, callerPhoneNumber, tradie);
       if (tradie && task) await createTask(task, phoneNumber);
       agent.disconnect();
