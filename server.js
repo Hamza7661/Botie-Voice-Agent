@@ -70,7 +70,7 @@ async function createTask(taskData, phoneNumber) {
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
-  const prompt = `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
+  const prompt = `You are a helpful agent for appointment booking. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -112,7 +112,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye`
+          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Also keep the conversation to the point. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
