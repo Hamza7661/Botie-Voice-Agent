@@ -71,33 +71,115 @@ async function createTask(taskData, phoneNumber) {
   }
 }
 
-async function summarizeConversation(convo, callerPhoneNumber, tradie) {
-  const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
-  const prompt = `You are a helpful agent for appointment booking. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
+async function sendTaskToAPI(taskData, phoneNumber) {
+  try {
+    console.log(`[📤 Sending task data to API:${taskData}]`);
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const headers = generateAuthHeaders();
+    headers['Content-Type'] = 'application/json';
+    headers['assigned-number'] = phoneNumber;
+
+    const response = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task-for-user`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(taskData)
+    });
+
+    if (!response.ok) {
+      throw new Error('Http error: ' + response.status);
+    }
+
+    const result = await response.json();
+    console.log(`[✅ Task created successfully, ${result}]`);
+    return result;
+  } catch (error) {
+    console.error(`[❌ Error sending task data: ${error}]`);
+    return null;
+  }
+}
+
+
+
+async function summarizeConversation(convo, callerPhoneNumber, tradie) {
+
+  const conversationText = convo
+    .map(entry => `${entry.role}: ${entry.content}`)
+    .join('\n');
+
+  // Simple prompt to ChatGPT
+  const aiPrompt = `Based on this conversation, create a JSON payload for a task:
+
+  Conversation:
+  ${conversationText}
+
+  Create a JSON with:
+  - heading: Professional job title
+  - summary: Brief job description  
+  - description: Description of the task/issue (not the full conversation)
+  - conversation: The complete conversation as a string
+  - customer: { name, address, phoneNumber: "${connectionData.callerPhoneNumber || ''}" }
+  - isResolved: false
+
+  Return only the JSON.`;
+
+  // Call ChatGPT API
+  fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model: 'gpt-4.1-nano',
       messages: [
-        { role: 'system', content: 'Return only JSON. No explanation.' },
-        { role: 'user', content: prompt }
+        {
+          role: 'system',
+          content: 'You are a helpful assistant that creates task JSON from conversations. Return only valid JSON.'
+        },
+        {
+          role: 'user',
+          content: aiPrompt
+        }
       ],
-      temperature: 0.2,
+      temperature: 0.3,
       max_tokens: 500
     })
-  });
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`ChatGPT API failed: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(result => {
+      const aiResponse = result.choices[0].message.content;
 
-  const result = await res.json();
-  const match = result.choices[0].message.content.match(/\{[\s\S]*\}/);
-  const task = match ? JSON.parse(match[0]) : null;
-  console.log('[📞 Phone in summary prompt]:', callerPhoneNumber);
-  console.log(`[📋 Task summary generated]:`, task);
-  return task;
+      // Extract JSON from AI response
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in AI response');
+      }
+
+      const taskData = JSON.parse(jsonMatch[0]);
+      console.log(`[📤 Task data extracted for call:`, taskData, ']');
+
+      // Send task to API using the tradie's phone number
+      const tradiePhoneNumber = tradie?.data?.phoneNumber;
+      if (tradiePhoneNumber) {
+        sendTaskToAPI(taskData, tradiePhoneNumber).then(result => {
+          if (result) {
+            console.log(`[✅ Task created successfully in API for call]`);
+          } else {
+            console.log(`[❌ Failed to create task in API for call]`);
+          }
+        });
+      } else {
+        console.log(`[❌ No tradie phone number available for task creation for call ${connectionData.callSid}]`);
+      }
+    })
+    .catch(error => {
+      console.error(`[❌ Error extracting conversation data for call ${connectionData.callSid}:`, error, ']');
+    });
 }
 
 function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
