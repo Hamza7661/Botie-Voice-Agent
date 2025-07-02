@@ -90,10 +90,10 @@ async function sendTaskToAPI(taskData, phoneNumber) {
     }
 
     const result = await response.json();
-    console.log(`[✅ Task created successfully, ${result}]`);
+    console.log(`[✅ Task created successfully]`, result);
     return result;
   } catch (error) {
-    console.error(`[❌ Error sending task data: ${error}]`);
+    console.error(`[❌ Error sending task data]`, error);
     return null;
   }
 }
