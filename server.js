@@ -137,7 +137,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
 
   agent.on(AgentEvents.ConversationText, async data => {
     conversation.push(data);
-    if (data.role === 'assistant' && /goodbye/i.test(data.content)) {
+    if (data.role === 'assistant' && data.content.includes('Goodbye')) {
       console.log("intiiaing task sending")
       const task = await summarizeConversation(conversation, callerPhoneNumber, tradie);
       if (tradie && task) await createTask(task, phoneNumber);
