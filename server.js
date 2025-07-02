@@ -57,7 +57,7 @@ async function createTask(taskData, phoneNumber) {
   try {
     const headers = generateAuthHeaders();
     headers['assigned-number'] = phoneNumber;
-    const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task-for-user`, {
+    const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task`, {
       method: 'POST',
       headers,
       body: JSON.stringify(taskData)
