@@ -198,7 +198,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Just gather the mentioned information and when done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye'`
+          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Just gather the mentioned information and when done, say 'Thanks we have got your job request. Someone will be with you shortly. Thanks. Goodbye'`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
