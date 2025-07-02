@@ -19,6 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const activeCalls = new Map();
 const callSidToPhone = new Map();
+const callSidToCaller = new Map();
 
 function generateAuthHeaders() {
   const timestamp = Date.now().toString();
@@ -69,7 +70,7 @@ async function createTask(taskData, phoneNumber) {
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   const text = convo.map(m => `${m.role}: ${m.content}`).join('\n');
-  const prompt = `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Try to keep it to the point dont engage too much. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
+  const prompt = `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Based on this conversation, return JSON with heading, summary, description, full conversation, and customer { name, address, phoneNumber: "${callerPhoneNumber}" }, isResolved=false.\n\n${text}`;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -154,7 +155,8 @@ wss.on('connection', (ws, req) => {
     if (data.event === 'start') {
       callSid = data.start.callSid;
       const phoneNumber = callSidToPhone.get(callSid) || '';
-      const caller = decodeURIComponent(data.start.from || '');
+      const caller = callSidToCaller.get(callSid) || decodeURIComponent(data.start.from || '');
+      console.log('[🔎 WS start event]', { callSid, phoneNumber, caller });
       const tradie = await getTradieData(phoneNumber);
       const agent = createDeepgramAgent(callSid, phoneNumber, caller, tradie);
       activeCalls.set(callSid, { ws, streamSid: data.start.streamSid, agent });
@@ -186,6 +188,10 @@ app.post('/twiml', (req, res) => {
   const callerPhoneNumber = decodeURIComponent(req.body.From || '');
 
   callSidToPhone.set(callSid, phoneNumber);
+  callSidToCaller.set(callSid, callerPhoneNumber);
+
+  console.log('[📲 TwiML Request]', { callSid, phoneNumber, callerPhoneNumber });
+
   const host = req.headers.host;
   res.type('text/xml').send(`
     <Response>
