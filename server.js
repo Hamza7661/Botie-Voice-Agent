@@ -42,6 +42,9 @@ async function getTradieData(phoneNumber) {
     headers['assigned-number'] = phoneNumber;
     const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/getuserbyassignednumber`, { headers });
     const data = res.ok ? await res.json() : null;
+    if (!data) {
+      console.log('[⚠️ Task creation failed]', await res.text());
+    }
     console.log(`[📞 Tradie data fetched for ${phoneNumber}]:`, data);
     return data;
   } catch (err) {
@@ -92,6 +95,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   const result = await res.json();
   const match = result.choices[0].message.content.match(/\{[\s\S]*\}/);
   const task = match ? JSON.parse(match[0]) : null;
+  console.log('[📞 Phone in summary prompt]:', callerPhoneNumber);
   console.log(`[📋 Task summary generated]:`, task);
   return task;
 }
@@ -112,7 +116,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are a helpful agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Also keep the conversation to the point. When done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye`
+          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Just gather the mentioned information and when done, say 'Thanks we have got your job request. A CSR will be with you shortly. Goodbye'`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
@@ -133,7 +137,8 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
 
   agent.on(AgentEvents.ConversationText, async data => {
     conversation.push(data);
-    if (data.role === 'assistant' && data.content == 'Goodbye') {
+    if (data.role === 'assistant' && /goodbye/i.test(data.content)) {
+      console.log("intiiaing task sending")
       const task = await summarizeConversation(conversation, callerPhoneNumber, tradie);
       if (tradie && task) await createTask(task, phoneNumber);
       agent.disconnect();
