@@ -45,7 +45,7 @@ async function getTradieData(phoneNumber) {
     if (!data) {
       console.log('[⚠️ Task creation failed]', await res.text());
     }
-    console.log(`[📞 Tradie data fetched for ${phoneNumber}]:`, data);
+    console.log(`[📞 Tradie data fetched for ${phoneNumber}]`);
     return data;
   } catch (err) {
     console.error('❌ Tradie API Error:', err);
@@ -73,24 +73,26 @@ async function createTask(taskData, phoneNumber) {
 
 async function sendTaskToAPI(taskData, phoneNumber) {
   try {
-    console.log(`[📤 Sending task data to API:${taskData}]`);
 
     const headers = generateAuthHeaders();
     headers['Content-Type'] = 'application/json';
     headers['assigned-number'] = phoneNumber;
 
-    const response = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task-for-user`, {
+    const url = `${process.env.BOTIE_API_BASE_URL}/create-task-for-user`;
+    const requestBody = JSON.stringify(taskData);
+    const response = await fetch(url, {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify(taskData)
+      body: requestBody
     });
-
     if (!response.ok) {
-      throw new Error('Http error: ', response);
+      const errorText = await response.text();
+      console.log(`[❌ Error Response Body:]`, errorText);
+      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log(`[✅ Task created successfully]`, result);
+    console.log(`[✅ Task created successfully]`);
     return result;
   } catch (error) {
     console.error(`[❌ Error sending task data]`, error);
@@ -161,7 +163,6 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       }
 
       const taskData = JSON.parse(jsonMatch[0]);
-      console.log(`[📤 Task data extracted for call:`, taskData, ']');
 
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
@@ -198,7 +199,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once. Just gather the mentioned information and when done, say 'Thanks we have got your job request. Someone will be with you shortly. Thank you for reaching out. Goodbye'`
+          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once and dont ask too much. Just gather the mentioned information and when done, say 'Thanks we have got your job request. Someone will be with you shortly. Thank you for reaching out. Goodbye'`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
@@ -220,7 +221,6 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
   agent.on(AgentEvents.ConversationText, async data => {
     conversation.push(data);
     if (data.role === 'assistant' && data.content.includes('Goodbye')) {
-      console.log("intiiaing task sending")
       const task = await summarizeConversation(conversation, callerPhoneNumber, tradie);
       if (tradie && task) await createTask(task, phoneNumber);
       agent.disconnect();
