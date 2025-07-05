@@ -55,8 +55,6 @@ async function getTradieData(phoneNumber) {
 
 async function createTask(taskData, phoneNumber) {
   try {
-    console.log("task data");
-    console.log(JSON.stringify(taskData));
     const headers = generateAuthHeaders();
     headers['assigned-number'] = phoneNumber;
     const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task`, {
@@ -165,8 +163,6 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       }
 
       const taskData = JSON.parse(jsonMatch[0]);
-
-      console.log(jsonMatch[0]);
 
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
