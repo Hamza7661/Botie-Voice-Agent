@@ -272,7 +272,7 @@ app.post('/twiml', (req, res) => {
   const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
   const callSid = req.body.CallSid;
   const callerPhoneNumber = decodeURIComponent(req.body.From || '');
-
+  console.log("Caller:", callerPhoneNumber);
   callSidToPhone.set(callSid, phoneNumber);
   callSidToCaller.set(callSid, callerPhoneNumber);
 
