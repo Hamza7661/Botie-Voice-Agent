@@ -55,6 +55,8 @@ async function getTradieData(phoneNumber) {
 
 async function createTask(taskData, phoneNumber) {
   try {
+    console.log("task data");
+    console.log(JSON.stringify(taskData));
     const headers = generateAuthHeaders();
     headers['assigned-number'] = phoneNumber;
     const res = await fetch(`${process.env.BOTIE_API_BASE_URL}/create-task`, {
@@ -271,7 +273,7 @@ server.on('upgrade', (req, socket, head) => {
 app.post('/twiml', (req, res) => {
   const phoneNumber = decodeURIComponent(req.body.To || req.body.Called || '');
   const callSid = req.body.CallSid;
-  const callerPhoneNumber = decodeURIComponent(req.body.From?.trim() || '');
+  const callerPhoneNumber = decodeURIComponent(req.body.From || '');
   callSidToPhone.set(callSid, phoneNumber);
   callSidToCaller.set(callSid, callerPhoneNumber);
 
