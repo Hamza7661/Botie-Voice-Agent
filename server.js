@@ -121,7 +121,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
   - conversation: The complete conversation as a string
-  - customer: { name, address, phoneNumber: "${tradie?.data?.phoneNumber || ''}" }
+  - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
 
   Return only the JSON.`;
@@ -165,6 +165,8 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       }
 
       const taskData = JSON.parse(jsonMatch[0]);
+
+      console.log(jsonMatch[0]);
 
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
