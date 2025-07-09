@@ -208,8 +208,8 @@ Important: Never ask the user whether this is an appointment, job request, or re
 
 If the user's message sounds like a reminder (e.g., “remind me or i have to do something or be at” or a task to remember):
 - This is a REMINDER. Do not ask for name, address, phone number, or job details.
-- Only ask for time **if** no time or location is mentioned.
-- Only ask for location **if** no time is mentioned.
+- Only ask for time **if** no time or location is mentioned in the prior conversation.
+- Only ask for location **if** no time is mentioned in the prior conversation.
 - If the user gave either time or location in their message, do not ask anything else. Proceed immediately.
 - Be quick and do not ask anything extra.
 
