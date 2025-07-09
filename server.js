@@ -6,7 +6,7 @@ import { createClient, AgentEvents } from '@deepgram/sdk';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
-import { getCountryInfoFromPhone } from './getCountryInfoFromPhone.js';
+import { getCountryInfoFromPhone } from './util/getCountryInfoFromPhone.js';
 
 dotenv.config();
 
