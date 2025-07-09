@@ -179,11 +179,6 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
 
   Return only the JSON.`;
 
-  if (taskData.reminderLocation) {
-    const result = await getNearestLocationByName(tradie?.data?.address, taskData.reminderLocation);
-    taskData.reminderLocation = `${result.lat}, ${result.lng}`;
-  }
-
   // Call ChatGPT API
   fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -213,7 +208,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       }
       return response.json();
     })
-    .then(result => {
+    .then( async (result) => {
       const aiResponse = result.choices[0].message.content;
 
       // Extract JSON from AI response
@@ -228,6 +223,11 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
         const local = DateTime.fromISO(taskData.reminderTime.replace('Z', ''), { zone: contactInfo.timezone });
         console.log(`[📝 Local time: ${local.toISO()}]`);
         taskData.reminderTime = local.toISO(); // Convert to UTC ISO 8601
+      }
+
+      if (taskData.reminderLocation) {
+        const result = await getNearestLocationByName(tradie?.data?.address, taskData.reminderLocation);
+        taskData.reminderLocation = `${result.lat}, ${result.lng}`;
       }
       
       console.log(`[📝 Task data: ${JSON.stringify(taskData)}]`);
