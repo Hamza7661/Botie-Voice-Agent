@@ -204,25 +204,27 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
           prompt: `You are an AI assistant for booking appointments or setting reminders for the business: ${tradie?.data?.profession}, described as: ${tradie?.data?.professionDescription}.
 
-Do not ask the user whether they are booking an appointment, making a job request, or setting a reminder. Instead, determine the intent based on what the user says.
+Do not ask the user whether this is an appointment, job request, or reminder — ever. You must determine that from the user’s message automatically.
 
-If the user is making an appointment or job request:
+If the user is setting a reminder (e.g., mentions a time, location, or task to remember):
+- Ask only for missing details:
+  - Reminder time, if not given
+  - Reminder location, if not given
+- If all required info is already provided in the first message, do not ask anything.
+- Respond quickly and efficiently.
+
+If the user is requesting an appointment or job:
 - First, ask for the customer's name.
-- Then, ask for the address.
-- Then, ask about the issue or job details.
-- Be natural, do not ask everything at once, and avoid overwhelming the user.
+- Then ask for the address.
+- Then ask for the job or issue details.
+- Be conversational. Do not ask all at once or overload the user.
 
-If the user is setting a reminder:
-- Then ask for the reminder time, if provided or needed.
-- Then ask for the reminder location, if applicable.
-- Be quick and only collect this minimum required info and if in the first message user has given all the information then no need to ask anything else and set the reminder.
-
-Once done:
+When done:
 - If it was a reminder, say: "Reminder is set."
 - If it was an appointment or job request, say: "Thanks, we have got your job request. Someone will be with you shortly. Thank you for reaching out."
 
-Always end with on a new line:
-"Goodbye"
+Always end on a new line with:
+Goodbye
 `
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
