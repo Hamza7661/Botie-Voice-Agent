@@ -103,8 +103,6 @@ async function sendTaskToAPI(taskData, phoneNumber) {
 
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
-
-  console.log('this is caller phone number', callerPhoneNumber);
   const conversationText = convo
     .map(entry => `${entry.role}: ${entry.content}`)
     .join('\n');
@@ -121,7 +119,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null
   - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null
-  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}
+  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}. Also convert into utc. You can decide the timezone of user through the country code in phone number which is (${callerPhoneNumber})
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
