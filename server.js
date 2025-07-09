@@ -169,6 +169,9 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
 
       console.log(`[📝 Task data: ${JSON.stringify(taskData)}]`);
 
+      
+      console.log(`[📝 Tradie data: ${JSON.stringify(tradie?.data)}]`);
+
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
       if (tradiePhoneNumber) {
@@ -180,11 +183,11 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
           }
         });
       } else {
-        console.log(`[❌ No tradie phone number available for task creation for call ${callerPhoneNumber}]`);
+        console.log(`[❌ No tradie phone number available for task creation for call ${tradiePhoneNumber}]`);
       }
     })
     .catch(error => {
-      console.error(`[❌ Error extracting conversation data for call ${callerPhoneNumber}:`, error, ']');
+      console.error(`[❌ Error extracting conversation data for call ${tradiePhoneNumber}:`, error, ']');
     });
 }
 
