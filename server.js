@@ -102,6 +102,50 @@ async function sendTaskToAPI(taskData, phoneNumber) {
   }
 }
 
+async function getCoordinatesFromAddress(address) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.results.length > 0) {
+    return data.results[0].geometry.location; // { lat, lng }
+  }
+
+  return null;
+}
+
+async function findNearestPlace(lat, lng, keyword) {
+  const radius = 5000; // in meters (5km)
+  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent(keyword)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+  
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.results.length > 0) {
+    const place = data.results[0];
+    return {
+      name: place.name,
+      lat: place.geometry.location.lat,
+      lng: place.geometry.location.lng,
+      address: place.vicinity,
+    };
+  }
+
+  return null;
+}
+
+
+async function getNearestLocationByName(address, keyword) {
+  const userCoords = await getCoordinatesFromAddress(address);
+  if (!userCoords) {
+    throw new Error("User location not found");
+  }
+
+  const nearestPlace = await findNearestPlace(userCoords.lat, userCoords.lng, keyword);
+  return nearestPlace;
+}
+
+
 
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
@@ -127,13 +171,18 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null
-  - reminderLocation: If the user sets a reminder with a location, provide the best estimated latitude and longitude of the mentioned place, relative to the user's address. You have access to known locations in major cities. country code ${contactInfo?.countryCode || ''} and the user address is ${tradie?.data?.address || ''} so give lat long comma seperated of the mentioned location nearest to the user address in format latitude, longitude"
+  - reminderLocation: the name of location mentioned by the user in conversation"
   - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${DateTime.now().setZone(contactInfo?.timezone || 'UTC').toString()}
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
 
   Return only the JSON.`;
+
+  if (taskData.reminderLocation) {
+    const result = await getNearestLocationByName(tradie?.data?.address, taskData.reminderLocation);
+    taskData.reminderLocation = `${result.lat}, ${result.lng}`;
+  }
 
   // Call ChatGPT API
   fetch('https://api.openai.com/v1/chat/completions', {
