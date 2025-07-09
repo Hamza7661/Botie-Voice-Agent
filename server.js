@@ -231,6 +231,9 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
           if (locationResult) {
             taskData.reminderLocation = `${locationResult.lat}, ${locationResult.lng}`;
           }
+          else{
+            taskData.reminderLocation = null;
+          }
       }
       
       console.log(`[📝 Task data: ${JSON.stringify(taskData)}]`);
