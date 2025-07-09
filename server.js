@@ -210,6 +210,7 @@ If the user is setting a reminder (e.g., mentions a time, location, or task to r
 - Ask only for missing details:
   - Reminder time, if location is not given
   - Reminder location, if time is not given
+  - we dont need name, address, phone number, issue, job details, etc for a reminder.
 - If the time or location is already provided in the first message, do not ask anything as we only require time or location.
 - Respond quickly and efficiently and try to set the reminder without asking anything.
 
