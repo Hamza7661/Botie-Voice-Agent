@@ -119,7 +119,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null
   - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null. Set the mentioned location's lat long according to country code of the phone number that is (${callerPhoneNumber})
-  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}. Also convert into utc. You can decide the timezone for conversion the user mentioned time into utc through the country code in phone number which is (${callerPhoneNumber}). For instance if country code is +61 then it is in Australia and its timezone is UTC+10 so minus 10 hours from the mentioned datetime.
+  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}. Also convert into utc. You can decide the timezone for conversion the user mentioned time into utc through the country code in phone number which is (${callerPhoneNumber}).
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
