@@ -6,6 +6,7 @@ import { createClient, AgentEvents } from '@deepgram/sdk';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { getCountryInfoFromPhone } from './getCountryInfoFromPhone.js';
 
 dotenv.config();
 
@@ -107,6 +108,9 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
     .map(entry => `${entry.role}: ${entry.content}`)
     .join('\n');
 
+  const contactInfo = getCountryInfoFromPhone(callerPhoneNumber);
+
+
   // Simple prompt to ChatGPT
   const aiPrompt = `Based on this conversation, judge if the user is setting a reminder or asking for an appointment or job request and create a JSON payload for a task:
 
@@ -118,8 +122,8 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null
-  - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null. Set the mentioned location's lat long according to country code of the phone number that is (${callerPhoneNumber})
-  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}. Also convert into utc. You can decide the timezone for conversion the user mentioned time into utc through the country code in phone number which is (${callerPhoneNumber}).
+  - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null. Set the mentioned location's lat long according to country ${contactInfo.countryName}
+  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${new Date().toString()}. Also convert the mentioned time into utc using the timezone ${contactInfo.timezone}
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
