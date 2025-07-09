@@ -110,6 +110,8 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
 
   const contactInfo = getCountryInfoFromPhone(callerPhoneNumber);
 
+  console.log(`[📞 Contact info: ${JSON.stringify(contactInfo)}]`);
+
 
   // Simple prompt to ChatGPT
   const aiPrompt = `Based on this conversation, judge if the user is setting a reminder or asking for an appointment or job request and create a JSON payload for a task:
