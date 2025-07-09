@@ -174,7 +174,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       const taskData = JSON.parse(jsonMatch[0]);
 
       if (taskData.reminderTime && contactInfo?.timezone) {
-        const local = DateTime.fromISO(taskData.reminderTime, { zone: contactInfo.timezone });
+        const local = DateTime.fromISO(taskData.reminderTime.replace('Z', ''), { zone: contactInfo.timezone });
         console.log(`[📝 Local time: ${local.toISO()}]`);
         taskData.reminderTime = local.toISO(); // Convert to UTC ISO 8601
       }
