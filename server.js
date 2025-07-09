@@ -113,6 +113,8 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
 
   console.log(`[📞 Contact info: ${JSON.stringify(contactInfo)}]`);
 
+  console.log(`[📞 Tradie info: ${JSON.stringify(tradie)}]`);
+
 
   // Simple prompt to ChatGPT
   const aiPrompt = `Based on this conversation, judge if the user is setting a reminder or asking for an appointment or job request and create a JSON payload for a task:
@@ -125,7 +127,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null
-  - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null. Set the mentioned location's lat long according to country code ${contactInfo?.countryCode || ''}
+  - reminderLocation: If the user sets a reminder with a location, provide the best estimated latitude and longitude of the mentioned place, relative to the user's address. You have access to known locations in major cities. country code ${contactInfo?.countryCode || ''} and the user address is ${tradie?.data?.address || ''} so give lat long comma seperated of the mentioned location nearest to the user address"
   - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${DateTime.now().setZone(contactInfo?.timezone || 'UTC').toString()}
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
