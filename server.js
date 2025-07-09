@@ -104,6 +104,7 @@ async function sendTaskToAPI(taskData, phoneNumber) {
 
 async function summarizeConversation(convo, callerPhoneNumber, tradie) {
 
+  console.log('this is caller phone number', callerPhoneNumber);
   const conversationText = convo
     .map(entry => `${entry.role}: ${entry.content}`)
     .join('\n');
@@ -168,9 +169,6 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       const taskData = JSON.parse(jsonMatch[0]);
 
       console.log(`[📝 Task data: ${JSON.stringify(taskData)}]`);
-
-      
-      console.log(`[📝 Tradie data: ${JSON.stringify(tradie?.data)}]`);
 
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
