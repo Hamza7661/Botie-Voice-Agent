@@ -208,7 +208,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       }
       return response.json();
     })
-    .then( async (result) => {
+    .then(async result => {
       const aiResponse = result.choices[0].message.content;
 
       // Extract JSON from AI response
@@ -225,9 +225,12 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
         taskData.reminderTime = local.toISO(); // Convert to UTC ISO 8601
       }
 
+      // Handle location lookup if needed
       if (taskData.reminderLocation) {
-        const result = await getNearestLocationByName(tradie?.data?.address, taskData.reminderLocation);
-        taskData.reminderLocation = `${result.lat}, ${result.lng}`;
+          const locationResult = await getNearestLocationByName(tradie?.data?.address, taskData.reminderLocation);
+          if (locationResult) {
+            taskData.reminderLocation = `${locationResult.lat}, ${locationResult.lng}`;
+          }
       }
       
       console.log(`[📝 Task data: ${JSON.stringify(taskData)}]`);
@@ -235,13 +238,12 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
       // Send task to API using the tradie's phone number
       const tradiePhoneNumber = tradie?.data?.twilioPhoneNumber;
       if (tradiePhoneNumber) {
-        sendTaskToAPI(taskData, tradiePhoneNumber).then(result => {
-          if (result) {
-            console.log(`[✅ Task created successfully in API for call]`);
-          } else {
-            console.log(`[❌ Failed to create task in API for call]`);
-          }
-        });
+        const result = await sendTaskToAPI(taskData, tradiePhoneNumber);
+        if (result) {
+          console.log(`[✅ Task created successfully in API for call]`);
+        } else {
+          console.log(`[❌ Failed to create task in API for call]`);
+        }
       } else {
         console.log(`[❌ No tradie phone number available for task creation for call ${tradiePhoneNumber}]`);
       }
