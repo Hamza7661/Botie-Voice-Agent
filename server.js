@@ -204,7 +204,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
           prompt: `You are an AI assistant for booking appointments or setting reminders for the business: ${tradie?.data?.profession}, described as: ${tradie?.data?.professionDescription}.
 
-Do not ask the user whether this is an appointment, job request, or reminder — ever. You must determine that from the user’s message automatically.
+Do not ask the user whether this is an appointment or reminder — ever. You must determine that from the user’s message automatically.
 
 If the user is setting a reminder (e.g., mentions a time, location, or task to remember):
 - Ask only for missing details:
@@ -225,6 +225,8 @@ When done:
 
 Always end on a new line with:
 Goodbye
+
+Again Do not ask the user the type of call i.e reminder or appointment. You must determine that from the user’s message automatically.
 `
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
