@@ -109,7 +109,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
     .join('\n');
 
   // Simple prompt to ChatGPT
-  const aiPrompt = `Based on this conversation, create a JSON payload for a task:
+  const aiPrompt = `Based on this conversation, judge if the user is setting a reminder or asking for an appointment or job request and create a JSON payload for a task:
 
   Conversation:
   ${conversationText}
@@ -118,6 +118,9 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - heading: Professional job title
   - summary: Brief job description  
   - description: Description of the task/issue (not the full conversation)
+  - reminder: Reminder text if the user is setting a reminder if not set it to null
+  - reminderLocation: Location (lat, long) of the reminder if the user is setting a reminder and mentioned a location if not set it to null
+  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned a time if not set it to null
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
@@ -199,7 +202,7 @@ function createDeepgramAgent(callSid, phoneNumber, callerPhoneNumber, tradie) {
         listen: { provider: { type: 'deepgram', model: 'nova-3' } },
         think: {
           provider: { type: 'open_ai', model: 'gpt-4.1-nano' },
-          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. Ask the customer name, address, and issue. Don't rush it and don't ask everything at once and dont ask too much. Just gather the mentioned information and when done, say 'Thanks we have got your job request. Someone will be with you shortly. Thank you for reaching out.' and then at the end say seperately in a new line 'Goodbye'`
+          prompt: `You are an agent for appointment booking for business: ${tradie?.data?.profession} with business description: ${tradie?.data?.professionDescription}. the user can set a reminder or ask for an appointment or job request. If the user is asking for an appointment or job request then ask the customer name, address, and issue or else if the user is setting a reminder then ask the reminder, reminder time it any or reminder location if any and thats it. Don't rush it and don't ask everything at once and dont ask too much. Just gather the mentioned information and when done, say if the customer is setting a reminder then 'Reminder is set' else 'Thanks we have got your job request. Someone will be with you shortly. Thank you for reaching out.' In both cases then at the end say seperately in a new line 'Goodbye'`
         },
         speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } }
       }
