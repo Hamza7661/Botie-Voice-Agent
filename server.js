@@ -172,7 +172,7 @@ async function summarizeConversation(convo, callerPhoneNumber, tradie) {
   - description: Description of the task/issue (not the full conversation)
   - reminder: Reminder text if the user is setting a reminder if not set it to null. Should not contain text I'll set a reminder but be a topic.
   - reminderLocation: the name of location mentioned by the user in conversation"
-  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Today is ${DateTime.now().setZone(contactInfo?.timezone || 'UTC').toString()}
+  - reminderTime: Time of the reminder if the user is setting a reminder and mentioned date or a time if not set it to null. Its type is dateTime. Date should be current date if not mentioned else the mentioned date. It cannot be in the past. Time should also be in future. Today is ${DateTime.now().setZone(contactInfo?.timezone || 'UTC').toString()}
   - conversation: The complete conversation as a string
   - customer: { name, address, phoneNumber: "${callerPhoneNumber || ''}" }
   - isResolved: false
